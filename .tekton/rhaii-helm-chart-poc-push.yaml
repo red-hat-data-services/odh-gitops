@@ -27,7 +27,7 @@ spec:
   - name: output-image
     value: quay.io/redhat-user-workloads/rhoai-tenant/rhaii-helm-chart-poc:{{revision}}
   - name: path-context
-    value: "charts/rhoai-operator"
+    value: "charts/rhaii-helm-chart"
   - name: hermetic
     value: "false"
   pipelineSpec:
