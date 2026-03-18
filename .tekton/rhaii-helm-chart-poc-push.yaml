@@ -17,6 +17,8 @@ metadata:
   name: rhaii-helm-chart-poc-on-push
   namespace: rhoai-tenant
 spec:
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-rhaii-helm-chart-poc
   params:
   - name: git-url
     value: '{{source_url}}'
