@@ -25,7 +25,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/rhoai-tenant/rhaii-helm-chart-poc:{{revision}}
+    value: quay.io/rhoai/rhaii-helm-chart:{{revision}}
   - name: path-context
     value: "charts/rhaii-helm-chart"
   - name: hermetic
