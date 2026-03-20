@@ -1,33 +1,35 @@
 #!/usr/bin/env bash
-# Update RHAI operator Helm chart from OLM bundle and cloudmanager resources
+# Update RHAII operator Helm chart from opendatahub-operator repo and cloudmanager resources.
+#
+# By default, the opendatahub-operator repo is shallow-cloned from GitHub.
+# Use --odh-operator-dir to point to a local checkout instead.
 #
 # Usage:
-#   ./update-bundle.sh <version> [extra-args...]
+#   ./update-bundle.sh <version> [options...]
 #
 # Options:
-#   --odh-operator-dir <path>   Path to opendatahub-operator checkout
-#                               (default: ../opendatahub-operator relative to repo root)
+#   --odh-operator-dir <path>   Path to a local opendatahub-operator checkout.
+#                               Skips cloning from GitHub when set.
+#   --branch <branch>           Branch to clone (default: main).
+#                               Ignored when --odh-operator-dir is set.
 #
 # Examples:
 #   ./update-bundle.sh v2.19.0
+#   ./update-bundle.sh v2.19.0 --branch feat/my-branch
 #   ./update-bundle.sh v2.19.0 --odh-operator-dir /path/to/opendatahub-operator
-#   BUNDLE_EXTRACT_REGISTRY_USERNAME=$USER BUNDLE_EXTRACT_REGISTRY_PASSWORD=$PASS \
-#     ./update-bundle.sh v2.19.0
 
 set -euo pipefail
 
-VERSION="${1:?Usage: $0 <version> [extra-args...]}"
+VERSION="${1:?Usage: $0 <version> [options...]}"
 shift
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="$(cd "${CHART_DIR}/../.." && pwd)"
 
-BUNDLE_IMAGE="registry.redhat.io/rhoai/odh-operator-bundle:${VERSION}"
 NAMESPACE="redhat-ods-operator"
 
-# helmtemplate-generator Go module (must match scripts/extract-olm-bundle.sh)
-HELMTEMPLATE_GENERATOR_PKG="github.com/davidebianchi/helmtemplate-generator@3bc347fc1affd320b7829e64d262c9c5c6f4c40f"
+# helmtemplate-generator Go module
+HELMTEMPLATE_GENERATOR_PKG="github.com/davidebianchi/helmtemplate-generator@2aa99fe15d0dcb0350b110ce84d7cfc4158991b0"
 
 # Cloud mappings: <cloud_name> <kustomize_subdir> <output_subdir>
 CLOUD_TARGETS=(
@@ -35,14 +37,16 @@ CLOUD_TARGETS=(
     "coreweave coreweave cloudmanager/coreweave"
 )
 
-# Default path to opendatahub-operator repo
-ODH_OPERATOR_DIR="${REPO_ROOT}/../opendatahub-operator"
+# Defaults
+ODH_REPO_URL="git@github.com:opendatahub-io/opendatahub-operator.git"
+ODH_BRANCH="main"
+ODH_OPERATOR_DIR=""
+LOCAL_MODE=false
 
 # ==============================================================================
-# Parse extra args (extract --odh-operator-dir before passing rest to extract-olm-bundle)
+# Parse args
 # ==============================================================================
 
-EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
     case $1 in
         --odh-operator-dir)
@@ -51,49 +55,107 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ODH_OPERATOR_DIR="$2"
+            LOCAL_MODE=true
+            shift 2
+            ;;
+        --branch)
+            if [[ -z "${2:-}" ]]; then
+                echo "ERROR: --branch requires a value" >&2
+                exit 1
+            fi
+            ODH_BRANCH="$2"
             shift 2
             ;;
         *)
-            EXTRA_ARGS+=("$1")
-            shift
+            echo "ERROR: Unknown option: $1" >&2
+            exit 1
             ;;
     esac
 done
 
 # ==============================================================================
-# Step 1: Extract OLM bundle
-# ==============================================================================
-
-"${REPO_ROOT}/scripts/extract-olm-bundle.sh" \
-    --bundle "${BUNDLE_IMAGE}" \
-    --version "${VERSION}" \
-    --namespace "${NAMESPACE}" \
-    --config "${SCRIPT_DIR}/helmtemplate-config.yaml" \
-    --output "${CHART_DIR}" \
-    --chart-description "Red Hat OpenShift AI Operator Helm chart (non-OLM installation)" \
-    --use-user-auth \
-    "${EXTRA_ARGS[@]}"
-
-# ==============================================================================
-# Step 2: Generate cloudmanager templates from kustomize
-# ==============================================================================
-
 # Validate requirements
+# ==============================================================================
+
 if ! command -v kustomize &> /dev/null; then
     echo "ERROR: kustomize is not installed or not in PATH" >&2
     exit 1
 fi
-
 if ! command -v go &> /dev/null; then
     echo "ERROR: go is not installed or not in PATH" >&2
     exit 1
 fi
 
-if [[ ! -d "${ODH_OPERATOR_DIR}" ]]; then
-    echo "ERROR: opendatahub-operator directory not found at ${ODH_OPERATOR_DIR}" >&2
-    echo "Clone it with: git clone git@github.com:davidebianchi/opendatahub-operator.git ${ODH_OPERATOR_DIR}" >&2
+# ==============================================================================
+# Resolve opendatahub-operator directory
+# ==============================================================================
+
+if [[ "${LOCAL_MODE}" == "true" ]]; then
+    if [[ ! -d "${ODH_OPERATOR_DIR}" ]]; then
+        echo "ERROR: opendatahub-operator directory not found at ${ODH_OPERATOR_DIR}" >&2
+        exit 1
+    fi
+    echo "Using local opendatahub-operator: ${ODH_OPERATOR_DIR}"
+else
+    ODH_OPERATOR_DIR="$(mktemp -d)"
+    trap 'rm -rf "${ODH_OPERATOR_DIR}"' EXIT
+
+    echo "Cloning opendatahub-operator (branch: ${ODH_BRANCH})..."
+    git clone --depth 1 --branch "${ODH_BRANCH}" "${ODH_REPO_URL}" "${ODH_OPERATOR_DIR}"
+    echo "  Done"
+    echo ""
+fi
+
+# ==============================================================================
+# Step 1: Generate operator templates
+# ==============================================================================
+
+RHAI_KUSTOMIZE_PATH="${ODH_OPERATOR_DIR}/config/rhaii/rhoai/default/"
+if [[ ! -d "${RHAI_KUSTOMIZE_PATH}" ]]; then
+    echo "ERROR: Kustomize directory not found: ${RHAI_KUSTOMIZE_PATH}" >&2
     exit 1
 fi
+
+echo "=============================================================================="
+echo "Operator Templates (from operator repo)"
+echo "=============================================================================="
+echo ""
+echo "Configuration:"
+echo "  Source:      ${RHAI_KUSTOMIZE_PATH}"
+echo "  Namespace:   ${NAMESPACE}"
+echo "  Output:      ${CHART_DIR}"
+echo "  Config:      ${SCRIPT_DIR}/helmtemplate-config.yaml"
+echo ""
+
+# Clean existing template subdirs
+echo "Cleaning up existing templates..."
+for subdir in crds rbac manager webhooks; do
+    rm -rf "${CHART_DIR}/templates/${subdir}"
+done
+if [[ -d "${CHART_DIR}/templates" ]]; then
+    find "${CHART_DIR}/templates" -maxdepth 1 -name "*.yaml" ! -name "validation.yaml" -delete 2>/dev/null || true
+fi
+mkdir -p "${CHART_DIR}/templates"
+echo "  Done"
+echo ""
+
+APP_VERSION="${VERSION#v}"
+
+echo "Running kustomize build and helmtemplate-generator..."
+kustomize build "${RHAI_KUSTOMIZE_PATH}" | go run "${HELMTEMPLATE_GENERATOR_PKG}" \
+    -c "${SCRIPT_DIR}/helmtemplate-config.yaml" \
+    -o "${CHART_DIR}" \
+    --template-dir "${SCRIPT_DIR}" \
+    --chart-name "rhaii-helm-chart" \
+    --default-namespace "${NAMESPACE}" \
+    --chart-description "Red Hat OpenShift AI Operator Helm chart (non-OLM installation)" \
+    --app-version "${APP_VERSION}"
+
+echo "  Done"
+
+# ==============================================================================
+# Step 2: Generate cloudmanager templates from kustomize
+# ==============================================================================
 
 echo ""
 echo "=============================================================================="
@@ -104,17 +166,19 @@ echo "Configuration:"
 echo "  ODH Operator: ${ODH_OPERATOR_DIR}"
 echo ""
 
-# Clean up existing cloudmanager templates
-echo "Cleaning up existing cloudmanager templates..."
-rm -rf "${CHART_DIR}/templates/cloudmanager"
-echo "  Done"
-echo ""
-
 for target_entry in "${CLOUD_TARGETS[@]}"; do
     read -r cloud_name kustomize_subdir output_subdir <<< "${target_entry}"
 
-    kustomize_path="${ODH_OPERATOR_DIR}/config/cloudmanager/${kustomize_subdir}/default/"
+    kustomize_path="${ODH_OPERATOR_DIR}/config/cloudmanager/${kustomize_subdir}/rhoai/"
     output_path="${CHART_DIR}/templates/${output_subdir}"
+
+    # Clean only auto-generated subdirectories, preserving manually-created files (e.g. CR templates)
+    echo "Cleaning up auto-generated templates for ${cloud_name}..."
+    for subdir in crds manager rbac webhooks; do
+        rm -rf "${output_path}/${subdir}"
+    done
+    echo "  Done"
+    echo ""
 
     echo "Processing ${cloud_name} (${kustomize_subdir})..."
     echo "  Kustomize: ${kustomize_path}"
@@ -127,7 +191,6 @@ for target_entry in "${CLOUD_TARGETS[@]}"; do
 
     # Create temp config with placeholders replaced
     temp_config=$(mktemp)
-    trap 'rm -f "${temp_config}"' EXIT
     sed -e "s/CLOUD_NAME/${cloud_name}/g" \
         -e "s|CLOUD_DIR|${output_subdir}|g" \
         "${SCRIPT_DIR}/helmtemplate-config-cloudmanager.yaml" > "${temp_config}"

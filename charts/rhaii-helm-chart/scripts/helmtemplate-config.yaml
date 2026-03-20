@@ -6,30 +6,41 @@ filter:
         - CustomResourceDefinition
       names:
         - "kserves.components.platform.opendatahub.io"
-    - kinds:
-        - ValidatingWebhookConfiguration
-      names:
-        - "kserve-llmisvc-kueuelabels-validator.opendatahub.io"
-        - "kserve-isvc-kueuelabels-validator.opendatahub.io"
-        - "hardwareprofile-llmisvc-injector.opendatahub.io"
-    - kinds:
-        - MutatingWebhookConfiguration
-      names:
-        - "connection-llmisvc.opendatahub.io"
-        - "connection-isvc.opendatahub.io"
 
 rules:
   # Replace namespace references with Helm template
-  - path: .metadata.namespace
-    value: '{{ .Values.rhaiOperator.namespace }}'
+  - match:
+      excludeKinds:
+        - CustomResourceDefinition
+        - Namespace
+        - ClusterRole
+        - ClusterRoleBinding
+    changes:
+      - path: .metadata.namespace
+        value: '{{ .Values.rhaiOperator.namespace }}'
 
   # Replace Namespace resource name
   - match:
       kinds:
         - Namespace
+      names:
+        - 'redhat-ods-operator'
+        - 'cloudmanager-operator-system'
     changes:
       - path: .metadata.name
         value: '{{ .Values.rhaiOperator.namespace }}'
+      - action: delete
+        path: .metadata.labels
+
+  - match:
+      kinds:
+        - Namespace
+      names:
+        - 'redhat-ods-applications'
+        - 'opendatahub'
+    changes:
+      - path: .metadata.name
+        value: '{{ .Values.rhaiOperator.applicationsNamespace }}'
 
   # Replace namespace in RoleBinding/ClusterRoleBinding subjects
   - match:
@@ -46,7 +57,7 @@ rules:
         - ValidatingWebhookConfiguration
         - MutatingWebhookConfiguration
     changes:
-      - path: .webhooks[0].clientConfig.service.namespace
+      - path: .webhooks[*].clientConfig.service.namespace
         value: '{{ .Values.rhaiOperator.namespace }}'
 
   # Wrap CRDs with installCRDs condition
@@ -67,14 +78,23 @@ rules:
   - match:
       kinds:
         - Deployment
-    path: .spec.template.spec.imagePullSecrets
-    replaceWith: |
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-      {{- range . }}
-        - name: {{ . }}
-      {{- end }}
-      {{- end }}
+    changes:
+      - path: .spec.template.spec.imagePullSecrets
+        replaceWith: |
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+          {{- range . }}
+            - name: {{ . }}
+          {{- end }}
+          {{- end }}
+      - path: .spec.template.spec.containers[name=rhods-operator].env[name=RHAI_APPLICATIONS_NAMESPACE].value
+        value: '{{ .Values.rhaiOperator.applicationsNamespace }}'
+      - path: .spec.template.spec.containers[name=rhods-operator].env
+        appendWith: |
+          {{- range $name, $value := .Values.rhaiOperator.relatedImages }}
+          - name: {{ $name }}
+            value: {{ $value }}
+          {{- end }}
 
   # Replace manager container image with Helm template value
   - match:
@@ -84,13 +104,12 @@ rules:
       - path: .spec.template.spec.containers[0].image
         value: '{{ .Values.rhaiOperator.image }}'
 
-  # Append env vars for disabled components and services
   - match:
       kinds:
-        - Deployment
-    path: .spec.template.spec.containers[0].env
-    appendWith: |
-      {{- include "rhaii-helm-chart.disabledResourcesEnv" . | nindent 12 }}
+        - CustomResourceDefinition
+    changes:
+      - path: .metadata.annotations["helm.sh/resource-policy"]
+        value: keep
 
 output:
   splitByDocument: true

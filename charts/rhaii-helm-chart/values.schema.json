@@ -1,6 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "$defs": {
+    "dependency": {
+      "type": "object",
+      "description": "Dependency configuration",
+      "properties": {
+        "configuration": {
+          "type": "object",
+          "description": "Configuration for the dependency"
+        },
+        "managementPolicy": {
+          "type": "string",
+          "description": "Whether the operator manages this dependency (Managed or Unmanaged)",
+          "enum": ["Managed", "Unmanaged"],
+          "default": "Managed"
+        }
+      }
+    }
+  },
   "properties": {
     "enabled": {
       "type": "boolean",
@@ -19,6 +37,27 @@
         "type": "string"
       }
     },
+    "components": {
+      "type": "object",
+      "description": "Components configuration",
+      "properties": {
+        "kserve": {
+          "type": "object",
+          "description": "Kserve component configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create Kserve CR via post-install hook",
+              "default": true
+            },
+            "spec": {
+              "type": "object",
+              "description": "Kserve CR spec"
+            }
+          }
+        }
+      }
+    },
     "rhaiOperator": {
       "type": "object",
       "description": "RHAI Operator configuration",
@@ -28,9 +67,21 @@
           "description": "Operator namespace",
           "default": "redhat-ods-operator"
         },
+        "applicationsNamespace": {
+          "type": "string",
+          "description": "Applications namespace",
+          "default": "redhat-ods-applications"
+        },
         "image": {
           "type": "string",
           "description": "Manager container image"
+        },
+        "relatedImages": {
+          "type": "object",
+          "description": "Related images env vars (RELATED_IMAGE_*) for disconnected environments",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -50,11 +101,46 @@
             "namespace": {
               "type": "string",
               "description": "Cloud Manager operator namespace",
-              "default": "opendatahub-operator-system"
+              "default": "cloudmanager-operator-system"
             },
             "image": {
               "type": "string",
               "description": "Cloud Manager container image"
+            }
+          }
+        },
+        "kubernetesEngine": {
+          "type": "object",
+          "description": "AzureKubernetesEngine CR configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create AzureKubernetesEngine CR via post-install hook",
+              "default": true
+            },
+            "spec": {
+              "type": "object",
+              "description": "AzureKubernetesEngine CR spec",
+              "properties": {
+                "dependencies": {
+                  "type": "object",
+                  "description": "Dependency configurations",
+                  "properties": {
+                    "certManager": {
+                      "$ref": "#/$defs/dependency"
+                    },
+                    "gatewayAPI": {
+                      "$ref": "#/$defs/dependency"
+                    },
+                    "lws": {
+                      "$ref": "#/$defs/dependency"
+                    },
+                    "sailOperator": {
+                      "$ref": "#/$defs/dependency"
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -76,11 +162,46 @@
             "namespace": {
               "type": "string",
               "description": "Cloud Manager operator namespace",
-              "default": "opendatahub-operator-system"
+              "default": "cloudmanager-operator-system"
             },
             "image": {
               "type": "string",
               "description": "Cloud Manager container image"
+            }
+          }
+        },
+        "kubernetesEngine": {
+          "type": "object",
+          "description": "CoreWeaveKubernetesEngine CR configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create CoreWeaveKubernetesEngine CR via post-install hook",
+              "default": true
+            },
+            "spec": {
+              "type": "object",
+              "description": "CoreWeaveKubernetesEngine CR spec",
+              "properties": {
+                "dependencies": {
+                  "type": "object",
+                  "description": "Dependency configurations",
+                  "properties": {
+                    "certManager": {
+                      "$ref": "#/$defs/dependency"
+                    },
+                    "gatewayAPI": {
+                      "$ref": "#/$defs/dependency"
+                    },
+                    "lws": {
+                      "$ref": "#/$defs/dependency"
+                    },
+                    "sailOperator": {
+                      "$ref": "#/$defs/dependency"
+                    }
+                  }
+                }
+              }
             }
           }
         }
