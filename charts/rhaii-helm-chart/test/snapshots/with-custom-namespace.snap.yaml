@@ -2504,7 +2504,7 @@ spec:
             - name: RHAI_DISABLE_SETUPCONTROLLER_SERVICE
               value: "true"
             - name: RHAI_APPLICATIONS_NAMESPACE
-              value: rhai-applications
+              value: "rhai-applications"
             - name: ODH_PLATFORM_TYPE
               value: XKS
             - name: OPERATOR_NAME
@@ -2570,7 +2570,7 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   annotations:
-    cert-manager.io/inject-ca-from: redhat-ods-operator/opendatahub-operator-webhook-cert
+    cert-manager.io/inject-ca-from: rhai-operator/opendatahub-operator-webhook-cert
   name: rhods-operator-mutating-webhook-configuration
   namespace: rhai-operator
 webhooks:
