@@ -22,6 +22,12 @@ spec:
 {{- end }}
 ---
 {{- if or (eq ($gateway.create | toString) "true") (and $isMaaSEnabled (eq ($gateway.create | toString) "auto")) -}}
+{{- range $i, $listener := $gateway.spec.listeners }}
+  {{- $ns := (($listener.allowedRoutes | default dict).namespaces | default dict) }}
+  {{- if not $ns.from }}
+    {{- fail (printf "components.kserve.modelsAsService.gateway.spec.listeners[%d].allowedRoutes.namespaces.from is required. Choose: Selector (recommended), Same or All." $i) }}
+  {{- end }}
+{{- end }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
