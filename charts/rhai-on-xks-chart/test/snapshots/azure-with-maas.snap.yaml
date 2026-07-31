@@ -2582,6 +2582,7 @@ rules:
       - namespaces
     resourceNames:
       - redhat-ods-applications
+      - kuadrant-system
     verbs:
       - get
       - create
@@ -2718,6 +2719,58 @@ rules:
       - update
 ---
 # Source: rhai-on-xks-chart/templates/hooks/post-install-crs-rbac.yaml
+# Permissions in kuadrant-system for Authorino TLS and CA trust setup.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rhai-post-install-hook-kuadrant
+  namespace: kuadrant-system
+  labels:
+    helm.sh/chart: HELM_CHART_VERSION_REDACTED
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - create
+      - patch
+      - update
+  - apiGroups:
+      - cert-manager.io
+    resources:
+      - certificates
+    verbs:
+      - get
+      - create
+      - patch
+      - update
+  - apiGroups:
+      - operator.authorino.kuadrant.io
+    resources:
+      - authorinos
+    resourceNames:
+      - authorino
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    resourceNames:
+      - authorino
+    verbs:
+      - get
+      - patch
+---
+# Source: rhai-on-xks-chart/templates/hooks/post-install-crs-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -2733,6 +2786,27 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: rhai-post-install-hook-cert
+subjects:
+  - kind: ServiceAccount
+    name: rhai-post-install-hook
+    namespace: default
+---
+# Source: rhai-on-xks-chart/templates/hooks/post-install-crs-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rhai-post-install-hook-kuadrant
+  namespace: kuadrant-system
+  labels:
+    helm.sh/chart: HELM_CHART_VERSION_REDACTED
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rhai-post-install-hook-kuadrant
 subjects:
   - kind: ServiceAccount
     name: rhai-post-install-hook
@@ -3218,12 +3292,13 @@ spec:
               wait_for "MaaS gateway Certificate to be Ready" maas_gw_cert_ready
               
               echo "Step 5: Create MaaS API serving Certificate..."
-              kubectl apply -f - <<'EOF'
+              INFRA_NS="redhat-ai-gateway-infra"
+              kubectl apply -f - <<EOF
               apiVersion: cert-manager.io/v1
               kind: Certificate
               metadata:
                 name: maas-api-serving-cert
-                namespace: "redhat-ods-applications"
+                namespace: ${INFRA_NS}
               spec:
                 secretName: maas-api-serving-cert
                 issuerRef:
@@ -3231,8 +3306,20 @@ spec:
                   kind: "ClusterIssuer"
                   group: cert-manager.io
                 dnsNames:
-                  - "maas-api.redhat-ods-applications.svc"
-                  - "maas-api.redhat-ods-applications.svc.cluster.local"
+                  - "maas-api.${INFRA_NS}.svc"
+                  - "maas-api.${INFRA_NS}.svc.cluster.local"
+              EOF
+              
+              echo "Step 5b: Create odh-kserve-config ConfigMap (cert-manager issuer for KServe module)..."
+              kubectl apply -f - <<'EOF'
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: odh-kserve-config
+                namespace: "redhat-ods-applications"
+              data:
+                certManager.issuer: "rhai-ca-issuer"
+                certManager.issuerKind: "ClusterIssuer"
               EOF
               
               echo "Step 6: Create MaaS Gateway..."
@@ -3289,11 +3376,20 @@ spec:
                 kubectl create configmap rhai-ca-bundle --from-file=ca.crt=/tmp/ca.crt \
                   -n "$KUADRANT_NS" --dry-run=client -o yaml | kubectl apply -f -
               
-                kubectl patch deployment authorino -n "$KUADRANT_NS" --type=json -p='[
-                  {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"rhai-ca","configMap":{"name":"rhai-ca-bundle"}}},
-                  {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"rhai-ca","mountPath":"/etc/pki/tls/custom","readOnly":true}},
-                  {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"SSL_CERT_FILE","value":"/etc/pki/tls/custom/ca.crt"}}
-                ]'
+                kubectl patch deployment authorino -n "$KUADRANT_NS" --type=strategic -p='{
+                  "spec": {
+                    "template": {
+                      "spec": {
+                        "volumes": [{"name":"rhai-ca","configMap":{"name":"rhai-ca-bundle"}}],
+                        "containers": [{
+                          "name": "authorino",
+                          "volumeMounts": [{"name":"rhai-ca","mountPath":"/etc/pki/tls/custom","readOnly":true}],
+                          "env": [{"name":"SSL_CERT_FILE","value":"/etc/pki/tls/custom/ca.crt"}]
+                        }]
+                      }
+                    }
+                  }
+                }'
                 echo "Authorino CA trust configured."
               else
                 echo "Kuadrant namespace not found, skipping Authorino CA trust."
