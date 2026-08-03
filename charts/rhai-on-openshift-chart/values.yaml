@@ -175,7 +175,7 @@ components:
             # hostname: <HOSTNAME>
             protocol: HTTPS
             allowedRoutes:
-              # -- REQUIRED: set `from` to one of Same (recommended), Selector, or All. Template will fail if not set.
+              # -- REQUIRED: set `from` to Selector (recommended) or Same. Template will fail if not set.
               namespaces:
                 # from: Same
                 # from: Selector
@@ -218,7 +218,7 @@ components:
               # hostname: <HOSTNAME> # Uncomment this line to use a specific hostname.
               protocol: HTTPS
               allowedRoutes:
-                # -- REQUIRED: set `from` to one of Same (recommended), Selector, or All. Template will fail if not set.
+                # -- REQUIRED: set `from` to Selector (recommended) or Same. Template will fail if not set.
                 namespaces:
                   # from: Same
                   # from: Selector

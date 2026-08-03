@@ -86,24 +86,32 @@ charts:
           - azure.enabled=true
           - rhaiOperator.relatedImages[0].name=RELATED_IMAGE_ODH_KSERVE_LLMISVC_CONTROLLER_IMAGE
           - rhaiOperator.relatedImages[0].value=ghcr.io/opendatahub-io/kserve/odh-kserve-llmisvc-controller:release-v0.17
+          - components.kserve.gateway.allowedRoutes.namespaces.from=Same
 
       - name: with-custom-namespace
         setFlags:
           - azure.enabled=true
           - rhaiOperator.namespace=rhai-operator
           - rhaiOperator.applicationsNamespace=rhai-applications
+        setJsonFlags:
+          - 'components.kserve.gateway.allowedRoutes.namespaces={"from":"Selector","selector":{"matchLabels":{"inference-gateway-access":"true"}}}'
 
       - name: coreweave
         setFlags:
           - coreweave.enabled=true
+        setJsonFlags:
+          - 'components.kserve.gateway.allowedRoutes.namespaces={"from":"Same"}'
 
       - name: azure-with-pull-secret
         setFlags:
           - azure.enabled=true
           - imagePullSecret.dockerConfigJson=testauth
+        setJsonFlags:
+          - 'components.kserve.gateway.allowedRoutes.namespaces={"from":"Same"}'
 
       - name: coreweave-with-pull-secret
         setFlags:
           - coreweave.enabled=true
           - imagePullSecret.dockerConfigJson=testauth
-
+        setJsonFlags:
+          - 'components.kserve.gateway.allowedRoutes.namespaces={"from":"Same"}'
