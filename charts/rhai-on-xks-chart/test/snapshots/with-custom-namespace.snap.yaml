@@ -2892,7 +2892,10 @@ spec:
                     protocol: HTTP
                     allowedRoutes:
                       namespaces:
-                        from: All
+                        from: Selector
+                        selector:
+                          matchLabels:
+                            inference-gateway-access: "true"
                 infrastructure:
                   labels:
                     serving.kserve.io/gateway: kserve-ingress-gateway
