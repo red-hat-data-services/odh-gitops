@@ -68,8 +68,8 @@ jobs:
             rm -rf "target_repo/to-be-processed/helm/${chart}"
             mkdir -p "target_repo/to-be-processed/helm/${chart}"
             rsync -a \
-              --exclude '/test/' \
-              --exclude '/scripts/' \
+              --exclude 'test/' \
+              --exclude 'scripts/' \
               --exclude 'api-docs.md' \
               "source_repo/charts/${chart}/" \
               "target_repo/to-be-processed/helm/${chart}/"
