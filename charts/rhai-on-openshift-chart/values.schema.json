@@ -198,6 +198,9 @@
         "tempo": {
           "$ref": "#/definitions/dependency"
         },
+        "loki": {
+          "$ref": "#/definitions/dependency"
+        },
         "customMetricsAutoscaler": {
           "$ref": "#/definitions/dependency"
         },
@@ -323,7 +326,7 @@
       "properties": {
         "channel": {
           "type": "string",
-          "description": "Subscription channel (e.g., stable-v1, stable)"
+          "description": "Subscription channel (e.g., stable-v1, stable-6.6)"
         },
         "name": {
           "type": "string",
@@ -332,6 +335,10 @@
         "namespace": {
           "type": "string",
           "description": "Namespace where the operator will be installed"
+        },
+        "createNamespace": {
+          "type": "boolean",
+          "description": "Whether Helm should create the operator namespace"
         },
         "source": {
           "type": "string",

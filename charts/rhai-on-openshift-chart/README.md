@@ -17,7 +17,7 @@ This chart provides a flexible way to install the operators and configurations r
 > [!NOTE]
 > All commands below assume you are in the repository root directory.
 
-All components default to `Removed`. You can use a **profile** or a **values file** to enable the components you need.
+All components default to `Removed`. Monitoring defaults to `Managed` in OLM mode. You can use a **profile** or a **values file** to enable the components you need.
 
 ### Using a profile
 
@@ -30,7 +30,8 @@ export OPERATOR_TYPE=${OPERATOR_TYPE:-odh}
 # Install RHAII stack (KServe + required dependencies for inference)
 helm upgrade --install ${OPERATOR_TYPE} ./charts/rhai-on-openshift-chart -n ${OPERATOR_TYPE}-gitops --create-namespace \
   --set profile=rhaii \
-  --set operator.type=${OPERATOR_TYPE}
+  --set operator.type=${OPERATOR_TYPE} \
+  --set services.monitoring.dsci.managementState=Removed
 ```
 
 See [Deploy Profiles](#deploy-profiles) for available profiles and details.
@@ -281,6 +282,7 @@ Operators that can be installed. Use tri-state `enabled` field:
 | `clusterObservability` | Cluster Observability operator | opentelemetry |
 | `opentelemetry` | OpenTelemetry operator | - |
 | `tempo` | Tempo operator | opentelemetry |
+| `loki` | Loki operator | - |
 | `nfd` | Node Feature Discovery (required for GPU support) | - |
 | `nvidiaGPUOperator` | NVIDIA GPU Operator (required for GPU support) | nfd |
 
