@@ -2,10 +2,14 @@
 # Verify rhai-on-xks-chart installation and lifecycle in a Kubernetes cluster.
 #
 # Usage:
-#   ./verify.sh              # run all active tests
+#   ./verify.sh              # run all active tests on a disposable cluster
 #   ./verify.sh 1            # run only test 1 (install check)
 #   ./verify.sh 2 3          # run tests 2 and 3
 #   ./verify.sh 4            # standalone cert-manager; removes the test installation
+#   ./verify.sh 6            # MaaS namespace bootstrap; cleans up the release first
+#
+# Test 6 uninstalls RELEASE_NAME and deletes redhat-ai-gateway-infra, including
+# its contents. Run this script only against a disposable test cluster.
 #
 # Environment variables:
 #   RELEASE_NAME     - Helm release name (default: rhai-on-xks)
@@ -24,6 +28,102 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=verify-helpers.sh
 source "${SCRIPT_DIR}/verify-helpers.sh"
+
+# ─── Test 6: MaaS namespace bootstrap ──────────────────────────────────────
+
+test_6_maas_bootstrap() {
+  if [[ -z "$PULL_SECRET" ]]; then
+    fail "MaaS bootstrap test requires PULL_SECRET"
+    return 1
+  fi
+
+  # Exercise installation with no existing release, MaaS namespace, or pull Secrets.
+  # Other retained namespaces and CRDs can remain from the default installation tests.
+  log "Cleaning up the test release and MaaS infrastructure namespace"
+  if helm status "$RELEASE_NAME" -n "$NAMESPACE" &>/dev/null; then
+    # Cert-manager teardown is a manual prerequisite, not a chart hook.
+    bash "${SCRIPT_DIR}/remove-certmanager-operands.sh" || return 1
+  fi
+  helm uninstall "$RELEASE_NAME" -n "$NAMESPACE" --ignore-not-found \
+    --cascade foreground --wait --timeout "$DELETE_TIMEOUT" || return 1
+  kubectl delete namespace redhat-ai-gateway-infra --ignore-not-found \
+    --wait=true --timeout="${TIMEOUT}s" || return 1
+
+  if helm status "$RELEASE_NAME" -n "$NAMESPACE" &>/dev/null \
+    || kubectl get namespace redhat-ai-gateway-infra &>/dev/null \
+    || kubectl get secret rhai-pull-secret -n "$NAMESPACE" &>/dev/null \
+    || kubectl get secret rhai-maas-ns-pull-secret -n "$NAMESPACE" &>/dev/null; then
+    fail "MaaS bootstrap test requires a fresh release and infrastructure namespace"
+    return 1
+  fi
+
+  # Only the namespace hook runs; no component CRs or gateway resources are created.
+  local bootstrap_args=(
+    --set "cert-manager-operator.enabled=false"
+    --set "${CLOUD_PROVIDER}.kubernetesEngine.enabled=false"
+    --set "hooks.postInstallCrs.enabled=false"
+    --set "components.kserve.enabled=false"
+    --set "components.aigateway.enabled=true"
+    --set "components.aigateway.spec.modelsAsAService.managementState=Managed"
+    --set "components.aigateway.modelsAsAService.gateway.create=false"
+  )
+
+  log "Installing MaaS namespace bootstrap without a pre-existing pull Secret"
+  helm_deploy "${bootstrap_args[@]}" || return 1
+  assert_exists "MaaS infrastructure namespace" namespace/redhat-ai-gateway-infra
+  assert_exists "MaaS pull Secret" secret/rhai-pull-secret -n redhat-ai-gateway-infra
+  assert_exists "MaaS ServiceAccount" serviceaccount/maas-api -n redhat-ai-gateway-infra
+  assert_exists "Release pull Secret" secret/rhai-pull-secret -n "$NAMESPACE"
+  assert_not_exists "Bootstrap pull Secret (cleaned up)" secret/rhai-maas-ns-pull-secret -n "$NAMESPACE"
+  assert_not_exists "Namespace Job (cleaned up)" job/rhai-pre-install-maas-ns -n "$NAMESPACE"
+  [[ "$ASSERT_FAILED" -eq 0 ]] || return 1
+
+  local secret_uid
+  secret_uid=$(kubectl get secret rhai-pull-secret -n "$NAMESPACE" -o jsonpath='{.metadata.uid}') || return 1
+
+  log "Upgrading MaaS namespace bootstrap with the release pull Secret already present"
+  helm_deploy "${bootstrap_args[@]}" || return 1
+  if [[ "$(kubectl get secret rhai-pull-secret -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')" != "$secret_uid" ]]; then
+    fail "Release pull Secret was replaced during upgrade"
+    return 1
+  fi
+  pass "Release pull Secret UID preserved during upgrade"
+  assert_not_exists "Bootstrap pull Secret (cleaned up after upgrade)" secret/rhai-maas-ns-pull-secret -n "$NAMESPACE"
+  assert_not_exists "Namespace Job (cleaned up after upgrade)" job/rhai-pre-install-maas-ns -n "$NAMESPACE"
+  [[ "$ASSERT_FAILED" -eq 0 ]] || return 1
+
+  log "Failing the namespace hook with an unpullable image"
+  if helm upgrade "$RELEASE_NAME" "$CHART" -n "$NAMESPACE" --reuse-values \
+    --set "hooks.cliImage=invalid.invalid/maas-bootstrap:missing" --timeout 20s; then
+    fail "Upgrade with an unpullable hook image unexpectedly succeeded"
+    return 1
+  fi
+  if [[ "$(kubectl get job rhai-pre-install-maas-ns -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}')" != "invalid.invalid/maas-bootstrap:missing" ]]; then
+    fail "Failed upgrade did not reach the namespace hook"
+    return 1
+  fi
+  if [[ "$(kubectl get secret rhai-pull-secret -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')" != "$secret_uid" ]]; then
+    fail "Release pull Secret was removed or replaced during failed upgrade"
+    return 1
+  fi
+  pass "Release pull Secret UID preserved during failed upgrade"
+
+  log "Retrying the upgrade after namespace hook failure"
+  helm_deploy "${bootstrap_args[@]}" || return 1
+  if [[ "$(kubectl get secret rhai-pull-secret -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')" != "$secret_uid" ]]; then
+    fail "Release pull Secret was replaced during upgrade retry"
+    return 1
+  fi
+  pass "Release pull Secret UID preserved during upgrade retry"
+  assert_not_exists "Bootstrap pull Secret (cleaned up after retry)" secret/rhai-maas-ns-pull-secret -n "$NAMESPACE"
+  assert_not_exists "Namespace Job (cleaned up after retry)" job/rhai-pre-install-maas-ns -n "$NAMESPACE"
+  [[ "$ASSERT_FAILED" -eq 0 ]] || return 1
+
+  # Simulate an interrupted bootstrap leaving its hook Secret behind.
+  kubectl create secret generic rhai-maas-ns-pull-secret -n "$NAMESPACE" --from-literal=interrupted=true || return 1
+  helm uninstall "$RELEASE_NAME" -n "$NAMESPACE" --timeout "$DELETE_TIMEOUT" || return 1
+  assert_not_exists "Leftover bootstrap pull Secret (removed on uninstall)" secret/rhai-maas-ns-pull-secret -n "$NAMESPACE"
+}
 
 # ─── Test 1: Install check and component removed ─────────────────────────────
 
@@ -256,6 +356,7 @@ ALL_TESTS=(
   "3:LWS Managed→Unmanaged→Managed:test_3_lws_managed_unmanaged"
   "4:Standalone cert-manager (subchart disabled):test_4_external_certmanager"
   "5:Uninstall lifecycle (cleanup + cleanupNamespaces):test_5_uninstall_lifecycle"
+  "6:MaaS namespace bootstrap:test_6_maas_bootstrap"
 )
 
 check_prerequisites
