@@ -39,3 +39,5 @@ rhaiOperator:
       value: "quay.io/opendatahub/odh-model-serving-api@sha256:dc6ced7ac752d3770e31e3e83f4f9a6c793de5b9b04dde0d194d021020cef8e8"
     - name: RELATED_IMAGE_ODH_AI_GATEWAY_CONTROLLER_IMAGE
       value: "quay.io/opendatahub/odh-ai-gateway-controller@sha256:7fb132ce9460123ea7d44beb94cde71dc30079ae3396c924c209dd62f7530c38"
+    - name: RELATED_IMAGE_ODH_LLM_D_ASYNC_IMAGE
+      value: quay.io/opendatahub/odh-llm-d-async@sha256:e2a36eae83c3869a2882add05c7c86119b82948c2198d4cef6438c3ba0492c1d
