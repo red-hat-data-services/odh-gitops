@@ -63,7 +63,8 @@ RHAI on XKS Helm chart for non-OLM installation on non-OpenShift Kubernetes serv
 | components.aigateway.modelsAsAService.gateway.gatewayClassName | string | `"istio"` |  |
 | components.aigateway.modelsAsAService.gateway.name | string | `"maas-default-gateway"` |  |
 | components.aigateway.modelsAsAService.gateway.namespace | string | `""` |  |
-| components.aigateway.spec.modelsAsAService.managementState | string | `"Managed"` |  |
+| components.aigateway.spec.batchGateway.managementState | string | `"Removed"` |  |
+| components.aigateway.spec.modelsAsAService.managementState | string | `"Removed"` |  |
 | components.kserve.enabled | bool | `true` |  |
 | components.kserve.gateway.allowedRoutes.namespaces | object | `{}` |  |
 | components.kserve.gateway.create | bool | `true` |  |
