@@ -8,13 +8,17 @@ A Helm chart for installing ODH/RHOAI dependencies and component configurations
 
 | Repository | Name | Version |
 |------------|------|---------|
-|  | grid-enrollment | 0.2.0 |
-|  | praxis-gateway | 0.2.0 |
+|  | ai-grid-o11y-hub | 0.1.0 |
+|  | ai-grid-o11y-spoke | 0.1.0 |
+|  | grid-enrollment | 0.2.2 |
+|  | praxis-gateway | 0.2.2 |
 
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| ai-grid-o11y-hub | object | `{"enabled":false}` | AI Grid observability hub subchart |
+| ai-grid-o11y-spoke | object | `{"enabled":false}` | AI Grid observability spoke subchart |
 | components.aiHub | object | `{"defaults":{"odh":{"instancesNamespace":"odh-model-registry"},"rhoai":{"instancesNamespace":"rhoai-model-registries"}},"dependencies":{},"dsc":{"instancesNamespace":null,"managementState":null}}` | AI Hub component (Model Registry; replaces modelregistry from DSC v2) |
 | components.aiHub.defaults | object | `{"odh":{"instancesNamespace":"odh-model-registry"},"rhoai":{"instancesNamespace":"rhoai-model-registries"}}` | Operator-type-specific defaults for dsc fields |
 | components.aiHub.dependencies | object | `{}` | Dependencies required by AI Hub |
@@ -165,7 +169,7 @@ A Helm chart for installing ODH/RHOAI dependencies and component configurations
 | operator.odh | object | `{"applicationsNamespace":"opendatahub","monitoringNamespace":"opendatahub","olm":{"channel":"fast-3","name":"opendatahub-operator","namespace":"opendatahub-operator-system","source":"community-operators"}}` | ODH operator settings |
 | operator.rhoai | object | `{"applicationsNamespace":"redhat-ods-applications","monitoringNamespace":"redhat-ods-monitoring","olm":{"channel":"beta","name":"rhods-operator","namespace":"redhat-ods-operator","source":"redhat-operators"}}` | RHOAI operator settings |
 | operator.type | string | `"odh"` | Operator type: odh (Open Data Hub) or rhoai (Red Hat OpenShift AI) |
-| praxis-gateway | object | `{"enabled":true,"fullnameOverride":"grid-gateway","image":{"flavor":"grid-gateway","repository":"ghcr.io/praxis-proxy/grid-gateway","tag":"v0.2.1"}}` | AI Grid gateway (Praxis) |
+| praxis-gateway | object | `{"enabled":true,"fullnameOverride":"grid-gateway","image":{"flavor":"grid-gateway","repository":"ghcr.io/praxis-proxy/grid-gateway","tag":"v0.2.2"}}` | AI Grid gateway (Praxis) |
 | praxis-gateway.enabled | bool | `true` | Include the gateway when AIGateway and aiGrid are Managed. False uses an externally managed gateway. |
 | praxis-gateway.fullnameOverride | string | `"grid-gateway"` | Stable resource names, independent of the release name |
 | praxis-gateway.image.repository | string | `"ghcr.io/praxis-proxy/grid-gateway"` | Use the Grid gateway build, which includes Grid routing filters. |
