@@ -265,9 +265,6 @@ spec:
             - name: listener-tls
               mountPath: "/etc/praxis/listener-tls"
               readOnly: true
-            - name: credential-0
-              mountPath: "/run/secrets/grid-credentials/grid-model-client-token"
-              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -300,10 +297,6 @@ spec:
         - name: listener-tls
           secret:
             secretName: "grid-gateway-listener-tls"
-        - name: credential-0
-          secret:
-            secretName: "grid-model-client-token"
-            optional: false
 
 
 ---
@@ -490,6 +483,24 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 spec:
   controllerName: openshift.io/gateway-controller/v1
+
+---
+# Source: rhai-on-openshift-chart/templates/components/ai-grid.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: "grid-ca"
+  namespace: default
+  labels:
+    helm.sh/chart: HELM_CHART_VERSION_REDACTED
+    app.kubernetes.io/name: grid-enrollment
+    app.kubernetes.io/instance: release-test
+    app.kubernetes.io/version: "v0.3.0-rc.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ca:
+    secretName: "grid-ca-key"
+
 
 ---
 # Source: rhai-on-openshift-chart/templates/dependencies/rhcl/config.yaml
